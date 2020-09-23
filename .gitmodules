@@ -1,0 +1,6 @@
+[submodule "libzpu"]
+	path = libzpu
+	url = https://github.com/8bitgeek/libzpu.git
+[submodule "libs19"]
+	path = libs19
+	url = https://github.com/8bitgeek/libs19.git
