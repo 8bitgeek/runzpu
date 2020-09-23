@@ -45,11 +45,12 @@ static bool debug=false;
 
 static void command_line (int argc, char **argv);
 static void usage        (const char* exec_name);
+static void registers   (zpu_t* zpu);
 
 int main(int argc, char *argv[])
 {
     command_line( argc, argv );
-    
+
     memset(mem_seg_text,0,MEM_SEG_TEXT_SZ);
     memset(mem_seg_stack,0,MEM_SEG_STACK_SZ);
     
@@ -110,4 +111,88 @@ static void usage(const char* exec_name)
 {
 	fprintf( stderr, "Usage: %s [-d] [-t [clks]] <somefile>.s19\n", exec_name );
 }
+
+static void registers(zpu_t* zpu)
+{
+    printf ("PC=%08x SP=%08x TOS=%08x OP=%02x DM=%02x debug=%08x\n", zpu_get_pc(zpu), zpu_get_sp(zpu), zpu_get_tos(zpu), zpu->instruction, zpu->decode_mask, 0);
+    fflush(0);
+}
+extern void zpu_breakpoint_handler(zpu_t* zpu)
+{
+    fprintf( stderr, "breakpoint\n" );
+    registers(zpu);
+    exit(1);
+}
+
+extern void zpu_divzero_handler(zpu_t* zpu)
+{
+    fprintf( stderr, "divide by zero\n" );
+    registers(zpu);
+    exit(1);
+}
+
+extern void zpu_config_handler(zpu_t* zpu)
+{
+    fprintf( stderr, "CPU %d\n", zpu_get_cpu(zpu) );
+}
+
+extern void zpu_illegal_opcode_handler(zpu_t* zpu)
+{
+    fprintf( stderr, "illegal opcode\n" );
+    registers(zpu);
+    exit(1);
+}
+
+void zpu_segv_handler(zpu_mem_t* zpu_mem, uint32_t va)
+{
+    fprintf( stderr, "segment violation 0x%08X\n", va );
+    exit(1);
+}
+
+extern bool zpu_mem_override_get_uint32 ( zpu_mem_t* zpu_mem, uint32_t va, uint32_t* value )
+{
+    // The PHI platform UART status port
+    if (va == 0x80000024 || va == 0x080A000C)
+    {
+	    *value = 0x100;
+        return true;
+    }
+    return false;
+}
+
+extern bool zpu_mem_override_get_uint16 ( zpu_mem_t* zpu_mem, uint32_t va, uint16_t* value )
+{
+    /* NOP */
+    return false;
+}
+
+extern bool zpu_mem_override_get_uint8  ( zpu_mem_t* zpu_mem, uint32_t va, uint8_t* value )
+{
+    /* NOP */
+    return false;
+}
+
+extern bool zpu_mem_override_set_uint32 ( zpu_mem_t* zpu_mem, uint32_t va, uint32_t w )
+{
+    // The PHI platform UART port
+    if (va == 0x80000024 || va == 0x080A000C)
+    {
+    	printf("%c", (char)w);
+    	return true;
+    }
+    return false;
+}
+
+extern bool zpu_mem_override_set_uint16 ( zpu_mem_t* zpu_mem, uint32_t va, uint16_t w )
+{
+    /* NOP */
+    return false;
+}
+
+extern bool zpu_mem_override_set_uint8  ( zpu_mem_t* zpu_mem, uint32_t va, uint8_t w )
+{
+    /* NOP */
+    return false;
+}
+
 
