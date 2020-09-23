@@ -3,7 +3,7 @@
 # Creates an assembler listing file - test.lst
 
 # Path to the gcc executable and friends
-TOOLPATH=/home/michael/ZPU/toolchain/install/bin/
+TOOLPATH=/opt/zpu-gcc/bin/
 
 # The compiler/linker
 CC=$(TOOLPATH)zpu-elf-gcc
