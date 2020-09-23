@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <ctype.h>
 
 #include <zpu.h>
 
@@ -32,15 +33,23 @@
 #define MEM_SEG_TEXT_SZ     (1024*32)
 #define MEM_SEG_STACK_SZ    (1024*2)
 
-uint32_t mem_seg_text[MEM_SEG_TEXT_SZ/4];
-uint32_t mem_seg_stack[MEM_SEG_STACK_SZ/4];
+static uint32_t mem_seg_text[MEM_SEG_TEXT_SZ/4];
+static uint32_t mem_seg_stack[MEM_SEG_STACK_SZ/4];
 
-zpu_mem_t zpu_mem_seg_text;
-zpu_mem_t zpu_mem_seg_stack;
-zpu_t zpu;
+static zpu_mem_t zpu_mem_seg_text;
+static zpu_mem_t zpu_mem_seg_stack;
+static zpu_t zpu;
+
+static int debug_trace=(-1);
+static bool debug=false;
+
+static void command_line (int argc, char **argv);
+static void usage        (const char* exec_name);
 
 int main(int argc, char *argv[])
 {
+    command_line( argc, argv );
+    
     memset(mem_seg_text,0,MEM_SEG_TEXT_SZ);
     memset(mem_seg_stack,0,MEM_SEG_STACK_SZ);
     
@@ -63,3 +72,42 @@ int main(int argc, char *argv[])
     zpu_reset(&zpu,0x1fff8);
     zpu_execute(&zpu);
 }
+
+static void command_line(int argc, char **argv)
+{
+    int index=1; 
+
+	while (index < argc) {
+		if (argv[index][0] != '-') break;
+
+		if (!strcmp(argv[index], "-d")) {
+			debug=true;
+			++index;
+			continue;
+		}
+        else if (!strcmp(argv[index], "-t")) {
+			debug_trace=0;
+			++index;
+            if ( index < argc && isdigit(*argv[index]) )
+            {
+                debug_trace=atoi(argv[index]);
+                ++index;
+            }
+			continue;
+		}
+        else if (!strcmp(argv[index], "-?")) {
+			usage(argv[0]);
+			exit(0);
+		}
+
+		fprintf( stderr, "Invalid: option '%s'\n", argv[index] );
+		usage(argv[0]);
+		exit(1);
+	}
+}
+
+static void usage(const char* exec_name)
+{
+	fprintf( stderr, "Usage: %s [-d] [-t [clks]] <somefile>.s19\n", exec_name );
+}
+

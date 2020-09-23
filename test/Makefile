@@ -45,6 +45,8 @@ all: $(SOURCES) $(EXECUTABLE) $(BINARY) $(LISTING)
 # Link the executable from object files
 $(EXECUTABLE): $(OBJECTS) 
 	$(CC) $(LDFLAGS) $(OBJECTS) -o $@
+	srec_cat test -binary -offset 0x400 -o test.s19  -execution-start-address=0x400
+
 
 # Convert elf executable to raw binary image
 $(BINARY): $(EXECUTABLE)
@@ -60,5 +62,5 @@ $(LISTING): $(EXECUTABLE)
 
 # Clean up 
 clean:
-	rm -rf *o $(EXECUTABLE) $(BINARY) $(LISTING)
+	rm -rf *o *.s19 $(EXECUTABLE) $(BINARY) $(LISTING)
 	
