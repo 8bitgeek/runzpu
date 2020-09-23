@@ -60,6 +60,6 @@ int main(int argc, char *argv[])
 
     zpu_set_mem(&zpu,&zpu_mem_seg_text);
     
-    zpu_reset(&zpu);
+    zpu_reset(&zpu,0x1fff8);
     zpu_execute(&zpu);
 }
