@@ -42,6 +42,7 @@ static zpu_t zpu;
 
 static int debug_trace=(-1);
 static bool debug=false;
+static uint32_t opcode_count=0;
 
 static void command_line (int argc, char **argv);
 static void usage        (const char* exec_name);
@@ -117,6 +118,12 @@ static void registers(zpu_t* zpu)
     printf ("PC=%08x SP=%08x TOS=%08x OP=%02x DM=%02x debug=%08x\n", zpu_get_pc(zpu), zpu_get_sp(zpu), zpu_get_tos(zpu), zpu->instruction, zpu->decode_mask, 0);
     fflush(0);
 }
+
+extern uint8_t zpu_mem_get_opcode( zpu_mem_t* zpu_mem, uint32_t va )
+{
+    ++opcode_count;
+}
+
 extern void zpu_breakpoint_handler(zpu_t* zpu)
 {
     fprintf( stderr, "breakpoint\n" );
