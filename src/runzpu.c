@@ -60,14 +60,16 @@ int main(int argc, char *argv[])
                   "text", 
                   mem_seg_text, 
                   MEM_SEG_TEXT_BASE, 
-                  MEM_SEG_TEXT_SZ );
+                  MEM_SEG_TEXT_SZ,
+                  ZPU_MEM_ATTR_RD | ZPU_MEM_ATTR_EX );
 
     zpu_mem_init( &zpu_mem_seg_text,
                   &zpu_mem_seg_stack,
                   "stack",
                   mem_seg_stack,
                   MEM_SEG_STACK_BASE,
-                  MEM_SEG_STACK_SZ);
+                  MEM_SEG_STACK_SZ,
+                  ZPU_MEM_ATTR_RD | ZPU_MEM_ATTR_WR );
 
     zpu_set_mem(&zpu,&zpu_mem_seg_text);
     
@@ -119,7 +121,7 @@ static void registers(zpu_t* zpu)
     fflush(0);
 }
 
-extern uint8_t zpu_mem_get_opcode( zpu_mem_t* zpu_mem, uint32_t va )
+extern void zpu_opcode_fetch_notify( zpu_mem_t* zpu_mem, uint32_t va )
 {
     ++opcode_count;
 }
