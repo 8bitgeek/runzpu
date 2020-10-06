@@ -1,6 +1,7 @@
 
 TARGET=../bin/runzpu
-CFLAGS+=-O2 -I./ -I../libzpu -I../libs19
+#CFLAGS+=-O2 -I./ -I../libzpu -I../libs19
+CFLAGS+=-ggdb -I./ -I../libzpu -I../libs19
 libzpu=../libzpu/libzpu.a
 LIBS19=../libs19/libs19.a
 

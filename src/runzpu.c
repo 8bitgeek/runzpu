@@ -27,10 +27,12 @@
 
 #include <zpu.h>
 
+#include <srecreader.h>
+
 #define MEM_SEG_TEXT_BASE   0x00000
 #define MEM_SEG_STACK_BASE  0x1F800
 
-#define MEM_SEG_TEXT_SZ     (1024*32)
+#define MEM_SEG_TEXT_SZ     (1024*1024)
 #define MEM_SEG_STACK_SZ    (1024*2)
 
 static uint32_t mem_seg_text[MEM_SEG_TEXT_SZ/4];
@@ -40,9 +42,17 @@ static zpu_mem_t zpu_mem_seg_text;
 static zpu_mem_t zpu_mem_seg_stack;
 static zpu_t zpu;
 
+#define SREC_LINE_SZ        (780)
+static srec_reader_t srec_reader;
+static int s19_meta_fn( srec_reader_t* srec_reader);
+static int s19_store_fn( srec_reader_t* srec_reader);
+static int s19_term_fn( srec_reader_t* srec_reader);  
+static char line_buffer[ SREC_LINE_SZ ];
+
 static int debug_trace=(-1);
 static bool debug=false;
 static uint32_t opcode_count=0;
+static const char* filename; 
 
 static void command_line (int argc, char **argv);
 static void usage        (const char* exec_name);
@@ -50,46 +60,84 @@ static void registers   (zpu_t* zpu);
 
 int main(int argc, char *argv[])
 {
+    FILE* fp;
+
     command_line( argc, argv );
 
-    memset(mem_seg_text,0,MEM_SEG_TEXT_SZ);
-    memset(mem_seg_stack,0,MEM_SEG_STACK_SZ);
-    
-    zpu_mem_init( (zpu_mem_t*)NULL, 
-                  &zpu_mem_seg_text, 
-                  "text", 
-                  mem_seg_text, 
-                  MEM_SEG_TEXT_BASE, 
-                  MEM_SEG_TEXT_SZ,
-                  ZPU_MEM_ATTR_RD | ZPU_MEM_ATTR_EX );
+    if ( filename != NULL )
+    {
+        if ( ( fp = fopen( filename, "r" ) ) != NULL )
+        {
 
-    zpu_mem_init( &zpu_mem_seg_text,
-                  &zpu_mem_seg_stack,
-                  "stack",
-                  mem_seg_stack,
-                  MEM_SEG_STACK_BASE,
-                  MEM_SEG_STACK_SZ,
-                  ZPU_MEM_ATTR_RD | ZPU_MEM_ATTR_WR );
+            memset(mem_seg_text,0,MEM_SEG_TEXT_SZ);
+            memset(mem_seg_stack,0,MEM_SEG_STACK_SZ);
+            
+            zpu_mem_init( (zpu_mem_t*)NULL, 
+                        &zpu_mem_seg_text, 
+                        "text", 
+                        mem_seg_text, 
+                        MEM_SEG_TEXT_BASE, 
+                        MEM_SEG_TEXT_SZ,
+                        ZPU_MEM_ATTR_RD | ZPU_MEM_ATTR_EX );
 
-    zpu_set_mem(&zpu,&zpu_mem_seg_text);
+            zpu_mem_init( &zpu_mem_seg_text,
+                        &zpu_mem_seg_stack,
+                        "stack",
+                        mem_seg_stack,
+                        MEM_SEG_STACK_BASE,
+                        MEM_SEG_STACK_SZ,
+                        ZPU_MEM_ATTR_RD | ZPU_MEM_ATTR_WR );
+
+            zpu_set_mem(&zpu,&zpu_mem_seg_text);
+
+
+            zpu_mem_set_prot( &zpu_mem_seg_text, false );
+            srec_reader_init (  
+                    &srec_reader, 
+                    fp, 
+                    s19_meta_fn, 
+                    s19_store_fn, 
+                    s19_term_fn,
+                    line_buffer, 
+                    SREC_LINE_SZ,
+                    &zpu_mem_seg_text
+                );
+            srec_reader_read( &srec_reader );
+            fclose( fp );
+
+            zpu_reset(&zpu,0x1fff8);
+            zpu_mem_set_prot( &zpu_mem_seg_text, true );
+            zpu_execute(&zpu);
+            return 0;
+        }
+        else
+        {
+            fprintf( stderr, "open failed '%s'\n", filename );
+        }
+    }
+    else
+    {
+        usage(argv[0]);
+    }
     
-    zpu_reset(&zpu,0x1fff8);
-    zpu_execute(&zpu);
+    return -1;
 }
 
 static void command_line(int argc, char **argv)
 {
     int index=1; 
 
-	while (index < argc) {
-		if (argv[index][0] != '-') break;
-
-		if (!strcmp(argv[index], "-d")) {
+	while (index < argc) 
+    {
+		if ( strcmp(argv[index], "-d") == 0 ) 
+        {
 			debug=true;
 			++index;
 			continue;
 		}
-        else if (!strcmp(argv[index], "-t")) {
+        else 
+        if ( strcmp(argv[index], "-t") == 0 ) 
+        {
 			debug_trace=0;
 			++index;
             if ( index < argc && isdigit(*argv[index]) )
@@ -99,11 +147,18 @@ static void command_line(int argc, char **argv)
             }
 			continue;
 		}
-        else if (!strcmp(argv[index], "-?")) {
+        else 
+        if ( strcmp(argv[index], "-?") == 0 ) 
+        {
 			usage(argv[0]);
 			exit(0);
 		}
-
+        else
+        {
+            filename = argv[index++];
+            continue;
+        }
+        
 		fprintf( stderr, "Invalid: option '%s'\n", argv[index] );
 		usage(argv[0]);
 		exit(1);
@@ -125,6 +180,10 @@ extern void zpu_opcode_fetch_notify( zpu_mem_t* zpu_mem, uint32_t va )
 {
     ++opcode_count;
 }
+
+/****************************************************************************
+ * ZPU Memory/IO handlers
+ ****************************************************************************/
 
 extern void zpu_breakpoint_handler(zpu_t* zpu)
 {
@@ -204,4 +263,49 @@ extern bool zpu_mem_override_set_uint8  ( zpu_mem_t* zpu_mem, uint32_t va, uint8
     return false;
 }
 
+/****************************************************************************
+ * S19 Record Callbacks
+ ****************************************************************************/
+
+/* meta-record callback */
+int s19_meta_fn( srec_reader_t* srec_reader) 
+{
+    srec_result_t* record = &srec_reader->record;
+    printf( " META: %08X: ", record->address );
+    for( uint16_t n=0; n < record->length; n++ )
+    {
+        printf( "%02X", record->data[n] );
+    }
+    printf( "\n" );
+    return 0;
+}
+
+/* store payload callback */
+int s19_store_fn( srec_reader_t* srec_reader)   
+{
+    srec_result_t* record = &srec_reader->record;
+    zpu_mem_t* zpu_mem_root = (zpu_mem_t*)srec_reader->arg;
+
+    printf( "STORE: %08X: ", record->address );
+    for( uint16_t n=0; n < record->length; n++ )
+    {
+        printf( "%02X", record->data[n] );
+        zpu_mem_set_uint8( zpu_mem_root, record->address+n, record->data[n] );
+    }
+    printf( "\n" );
+    return 0;
+}
+
+/* termination / entry-point callback */
+int s19_term_fn( srec_reader_t* srec_reader)    
+{
+    srec_result_t* record = &srec_reader->record;
+    printf( " TERM: %08X: ", record->address );
+    for( uint16_t n=0; n < record->length; n++ )
+    {
+        printf( "%02X", record->data[n] );
+    }
+    printf( "\n" );
+    return 0;
+}
 
