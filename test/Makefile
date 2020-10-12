@@ -13,7 +13,7 @@ OD=$(TOOLPATH)zpu-elf-objdump -d -l --source
 #OD=$(TOOLPATH)zpu-elf-objdump -D -l --source
 
 # objcopy. Just copy relevent sections to a binary image.
-OC=$(TOOLPATH)zpu-elf-objcopy -O binary
+OC=$(TOOLPATH)zpu-elf-objcopy
 
 # Compiler flags. Compile only, debug info, all warnings, optimize for size
 CFLAGS=-c -g -Wall -Os
@@ -45,12 +45,12 @@ all: $(SOURCES) $(EXECUTABLE) $(BINARY) $(LISTING)
 # Link the executable from object files
 $(EXECUTABLE): $(OBJECTS) 
 	$(CC) $(LDFLAGS) $(OBJECTS) -o $@
-	srec_cat test -binary -offset 0x400 -o test.s19  -execution-start-address=0x400
-
 
 # Convert elf executable to raw binary image
 $(BINARY): $(EXECUTABLE)
-	$(OC) $(EXECUTABLE) $(BINARY)
+	$(OC) -O binary $(EXECUTABLE) $(BINARY)
+	srec_cat test.bin -binary -o test.s19 -execution-start-address=0x400
+	#$(OC) -O srec $(EXECUTABLE) test.s19
 
 # Create a listing file
 $(LISTING): $(EXECUTABLE)

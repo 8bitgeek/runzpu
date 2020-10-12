@@ -29,34 +29,35 @@
 
 #include <srecreader.h>
 
-#define MEM_SEG_TEXT_BASE   0x00000
-#define MEM_SEG_STACK_BASE  0x1F800
+#define MEM_SEG_TEXT_BASE   (0x000000)
+#define MEM_SEG_STACK_BASE  (0x100000)
 
 #define MEM_SEG_TEXT_SZ     (1024*1024)
-#define MEM_SEG_STACK_SZ    (1024*2)
-
-static uint32_t mem_seg_text[MEM_SEG_TEXT_SZ/4];
-static uint32_t mem_seg_stack[MEM_SEG_STACK_SZ/4];
-
-static zpu_mem_t zpu_mem_seg_text;
-static zpu_mem_t zpu_mem_seg_stack;
-static zpu_t zpu;
+#define MEM_SEG_STACK_SZ    (1024*(64*2))
 
 #define SREC_LINE_SZ        (780)
-static srec_reader_t srec_reader;
-static int s19_meta_fn( srec_reader_t* srec_reader);
-static int s19_store_fn( srec_reader_t* srec_reader);
-static int s19_term_fn( srec_reader_t* srec_reader);  
-static char line_buffer[ SREC_LINE_SZ ];
 
-static int debug_trace=(-1);
-static bool debug=false;
-static uint32_t opcode_count=0;
-static const char* filename; 
+static uint32_t          mem_seg_text[MEM_SEG_TEXT_SZ/4];
+static uint32_t          mem_seg_stack[MEM_SEG_STACK_SZ/4];
+
+static zpu_mem_t         zpu_mem_seg_text;
+static zpu_mem_t         zpu_mem_seg_stack;
+static zpu_t             zpu;
+
+static srec_reader_t     srec_reader;
+static int               s19_meta_fn( srec_reader_t* srec_reader);
+static int               s19_store_fn( srec_reader_t* srec_reader);
+static int               s19_term_fn( srec_reader_t* srec_reader);  
+static char              line_buffer[ SREC_LINE_SZ ];
+
+static int               debug_trace=(-1);
+static bool              debug=false;
+static uint32_t          opcode_count=0;
+static const char*       filename; 
 
 static void command_line (int argc, char **argv);
 static void usage        (const char* exec_name);
-static void registers   (zpu_t* zpu);
+static void registers    (zpu_t* zpu);
 
 int main(int argc, char *argv[])
 {
@@ -90,7 +91,7 @@ int main(int argc, char *argv[])
 
             zpu_set_mem(&zpu,&zpu_mem_seg_text);
 
-
+            zpu_reset(&zpu,0x10FFFF);
             zpu_mem_set_prot( &zpu_mem_seg_text, false );
             srec_reader_init (  
                     &srec_reader, 
@@ -104,10 +105,9 @@ int main(int argc, char *argv[])
                 );
             srec_reader_read( &srec_reader );
             fclose( fp );
-
-            zpu_reset(&zpu,0x1fff8);
             zpu_mem_set_prot( &zpu_mem_seg_text, true );
             zpu_execute(&zpu);
+
             return 0;
         }
         else
@@ -172,14 +172,18 @@ static void usage(const char* exec_name)
 
 static void registers(zpu_t* zpu)
 {
-    printf ("PC=%08x SP=%08x TOS=%08x OP=%02x DM=%02x debug=%08x\n", zpu_get_pc(zpu), zpu_get_sp(zpu), zpu_get_tos(zpu), zpu->instruction, zpu->decode_mask, 0);
+    printf ("PC=%08x SP=%08x TOS=%08x OP=%02x DM=%02x debug=%08x\n", zpu_get_pc(zpu), zpu_get_sp(zpu), zpu_get_tos(zpu), zpu->opcode, zpu->decode_mask, 0);
     fflush(0);
 }
 
 extern void zpu_opcode_fetch_notify( zpu_mem_t* zpu_mem, uint32_t va )
 {
     ++opcode_count;
+    printf ("PC=%08x SP=%08x TOS=%08x OP=%02x DM=%02x debug=%08x\n", zpu_get_pc(&zpu), zpu_get_sp(&zpu), zpu_get_tos(&zpu), zpu_mem_get_uint8( zpu_mem, va ), zpu.decode_mask, 0);
+    fflush(0);
 }
+
+
 
 /****************************************************************************
  * ZPU Memory/IO handlers
@@ -214,6 +218,7 @@ extern void zpu_illegal_opcode_handler(zpu_t* zpu)
 void zpu_segv_handler(zpu_mem_t* zpu_mem, uint32_t va)
 {
     fprintf( stderr, "segment violation 0x%08X\n", va );
+    registers(&zpu);
     exit(1);
 }
 
@@ -286,13 +291,13 @@ int s19_store_fn( srec_reader_t* srec_reader)
     srec_result_t* record = &srec_reader->record;
     zpu_mem_t* zpu_mem_root = (zpu_mem_t*)srec_reader->arg;
 
-    printf( "STORE: %08X: ", record->address );
+    // printf( "STORE: %08X: ", record->address );
     for( uint16_t n=0; n < record->length; n++ )
     {
-        printf( "%02X", record->data[n] );
+        // printf( "%02X", record->data[n] );
         zpu_mem_set_uint8( zpu_mem_root, record->address+n, record->data[n] );
     }
-    printf( "\n" );
+    // printf( "\n" );
     return 0;
 }
 
@@ -300,6 +305,7 @@ int s19_store_fn( srec_reader_t* srec_reader)
 int s19_term_fn( srec_reader_t* srec_reader)    
 {
     srec_result_t* record = &srec_reader->record;
+    zpu_set_pc(&zpu,record->address);
     printf( " TERM: %08X: ", record->address );
     for( uint16_t n=0; n < record->length; n++ )
     {
